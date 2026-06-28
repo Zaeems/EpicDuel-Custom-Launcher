@@ -84,7 +84,6 @@ C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\bin\x64\Debug\EpicestD
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\bin\x64\Debug\EpicestDueler.exe
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\bin\x64\Debug\EpicestDueler.pdb
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.csproj.AssemblyReference.cache
-C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.exe.config
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.Properties.Resources.resources
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.csproj.GenerateResource.cache
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.csproj.CoreCompileInputs.cache

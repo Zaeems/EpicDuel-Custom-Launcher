@@ -15,11 +15,14 @@ namespace EDCustomNative
     {
         private class ProfileInstance
         {
+            public string FolderName { get; set; }
             public string Name { get; set; }
             public ChromiumWebBrowser Browser { get; set; }
             public Bitmap Thumbnail { get; set; }
             public Panel SidebarButtonPanel { get; set; }
             public PictureBox SidebarPictureBox { get; set; }
+            public CheckBox GridCheckBox { get; set; }
+            public int PlayTimeSeconds { get; set; }
         }
 
         private List<ProfileInstance> instances = new List<ProfileInstance>();
@@ -28,8 +31,12 @@ namespace EDCustomNative
         private ProfileInstance contextMenuTarget;
 
         private Panel panelSidebar;
+        private Panel panelSidebarHeader;
+        private Button btnSingleMode;
+        private Button btnGridMode;
         private FlowLayoutPanel panelButtonList;
         private Panel panelGameContainer;
+        private TableLayoutPanel gridContainer;
         private PictureBox previewOverlay;
         private Panel panelAddAccount;
         private ContextMenuStrip profileContextMenu;
@@ -41,9 +48,12 @@ namespace EDCustomNative
         private Label lblTotalTime;
         private Label lblTodayTime;
         private Label lblActiveSessions;
+        private FlowLayoutPanel panelProfileStatsList;
+
         private int totalPlayTimeSeconds = 0;
         private int todayPlayTimeSeconds = 0;
         private string lastPlayedDate = "";
+        private bool isGridMode = false;
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
@@ -151,16 +161,20 @@ namespace EDCustomNative
         {
             profileContextMenu = new ContextMenuStrip();
 
+            var refreshItem = new ToolStripMenuItem("Refresh Profile");
+            refreshItem.Click += RefreshItem_Click;
+            refreshItem.ForeColor = Color.White;
+
             var renameItem = new ToolStripMenuItem("Rename Profile");
             renameItem.Click += RenameItem_Click;
             renameItem.ForeColor = Color.White;
 
             var removeItem = new ToolStripMenuItem("Remove Profile");
             removeItem.Click += RemoveItem_Click;
-
             removeItem.ForeColor = Color.FromArgb(220, 53, 69);
             removeItem.Image = GetTrashCanIcon();
 
+            profileContextMenu.Items.Add(refreshItem);
             profileContextMenu.Items.Add(renameItem);
             profileContextMenu.Items.Add(removeItem);
 
@@ -174,10 +188,74 @@ namespace EDCustomNative
             panelSidebar = new Panel
             {
                 Dock = DockStyle.Left,
-                Width = 160,
+                Width = 145,
                 BackColor = Color.FromArgb(30, 30, 30)
             };
             this.Controls.Add(panelSidebar);
+
+            panelSidebarHeader = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 45,
+                BackColor = Color.FromArgb(25, 25, 25),
+                Padding = new Padding(5)
+            };
+            panelSidebar.Controls.Add(panelSidebarHeader);
+
+            btnSingleMode = new Button
+            {
+                Width = 62,
+                Height = 35,
+                Location = new Point(5, 5),
+                BackColor = Color.FromArgb(40, 40, 40),
+                FlatStyle = FlatStyle.Flat
+            };
+            btnSingleMode.FlatAppearance.BorderSize = 0;
+            btnSingleMode.Click += (s, e) => {
+                isGridMode = false;
+                SyncLayout();
+                btnSingleMode.Invalidate();
+                btnGridMode.Invalidate();
+            };
+            btnSingleMode.Paint += (s, e) => {
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                Color blockColor = !isGridMode ? Color.FromArgb(0, 120, 215) : Color.FromArgb(120, 120, 120);
+                using (Brush brush = new SolidBrush(blockColor))
+                {
+                    e.Graphics.FillRectangle(brush, (btnSingleMode.Width - 18) / 2, (btnSingleMode.Height - 14) / 2, 18, 14);
+                }
+            };
+            panelSidebarHeader.Controls.Add(btnSingleMode);
+
+            btnGridMode = new Button
+            {
+                Width = 62,
+                Height = 35,
+                Location = new Point(78, 5),
+                BackColor = Color.FromArgb(40, 40, 40),
+                FlatStyle = FlatStyle.Flat
+            };
+            btnGridMode.FlatAppearance.BorderSize = 0;
+            btnGridMode.Click += (s, e) => {
+                isGridMode = true;
+                SyncLayout();
+                btnSingleMode.Invalidate();
+                btnGridMode.Invalidate();
+            };
+            btnGridMode.Paint += (s, e) => {
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                Color blockColor = isGridMode ? Color.FromArgb(0, 120, 215) : Color.FromArgb(120, 120, 120);
+                using (Brush brush = new SolidBrush(blockColor))
+                {
+                    int xStart = (btnGridMode.Width - 18) / 2;
+                    int yStart = (btnGridMode.Height - 14) / 2;
+                    e.Graphics.FillRectangle(brush, xStart, yStart, 8, 6);
+                    e.Graphics.FillRectangle(brush, xStart + 10, yStart, 8, 6);
+                    e.Graphics.FillRectangle(brush, xStart, yStart + 8, 8, 6);
+                    e.Graphics.FillRectangle(brush, xStart + 10, yStart + 8, 8, 6);
+                }
+            };
+            panelSidebarHeader.Controls.Add(btnGridMode);
 
             panelButtonList = new FlowLayoutPanel
             {
@@ -186,9 +264,10 @@ namespace EDCustomNative
                 WrapContents = false,
                 AutoScroll = true,
                 BackColor = Color.FromArgb(30, 30, 30),
-                Padding = new Padding(5)
+                Padding = new Padding(5, 5, 5, 5)
             };
             panelSidebar.Controls.Add(panelButtonList);
+            panelButtonList.BringToFront();
 
             panelGameContainer = new Panel
             {
@@ -197,6 +276,14 @@ namespace EDCustomNative
             };
             this.Controls.Add(panelGameContainer);
             panelGameContainer.BringToFront();
+
+            gridContainer = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Black,
+                Visible = false
+            };
+            panelGameContainer.Controls.Add(gridContainer);
 
             previewOverlay = new PictureBox
             {
@@ -222,9 +309,9 @@ namespace EDCustomNative
 
             Panel panelStats = new Panel
             {
-                Location = new Point(50, 150),
-                Width = 500,
-                Height = 300,
+                Location = new Point(40, 100),
+                Width = 450,
+                Height = 350,
                 BackColor = Color.FromArgb(30, 30, 30),
                 Padding = new Padding(20)
             };
@@ -232,7 +319,7 @@ namespace EDCustomNative
 
             Label lblStatsHeader = new Label
             {
-                Text = "STATISTICS & TELEMETRY",
+                Text = "GLOBAL STATISTICS",
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
                 Location = new Point(20, 20),
@@ -273,6 +360,38 @@ namespace EDCustomNative
                 Height = 25
             };
             panelStats.Controls.Add(lblActiveSessions);
+
+            Panel panelProfileStatsContainer = new Panel
+            {
+                Location = new Point(510, 100),
+                Width = 500,
+                Height = 350,
+                BackColor = Color.FromArgb(30, 30, 30),
+                Padding = new Padding(20)
+            };
+            panelDashboard.Controls.Add(panelProfileStatsContainer);
+
+            Label lblProfileStatsHeader = new Label
+            {
+                Text = "PLAYTIME BY ACCOUNT",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                Location = new Point(20, 20),
+                Width = 400,
+                Height = 25
+            };
+            panelProfileStatsContainer.Controls.Add(lblProfileStatsHeader);
+
+            panelProfileStatsList = new FlowLayoutPanel
+            {
+                Location = new Point(20, 60),
+                Width = 460,
+                Height = 270,
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false
+            };
+            panelProfileStatsContainer.Controls.Add(panelProfileStatsList);
         }
 
         private void ShowDashboard()
@@ -294,8 +413,65 @@ namespace EDCustomNative
             lblTodayTime.Text = $"Played Today:  {FormatTime(todayPlayTimeSeconds)}";
             lblActiveSessions.Text = $"Active Game Processes:  {instances.Count(i => i.Browser != null)}";
 
+            UpdateDashboardProfileStats();
+
             panelDashboard.Visible = true;
             panelDashboard.BringToFront();
+        }
+
+        private void UpdateDashboardProfileStats()
+        {
+            panelProfileStatsList.Controls.Clear();
+            foreach (var inst in instances)
+            {
+                Panel row = new Panel { Width = 430, Height = 30, Margin = new Padding(0, 2, 0, 2) };
+
+                Button btnFolder = new Button
+                {
+                    Size = new Size(24, 24),
+                    Location = new Point(0, 3),
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(45, 45, 45)
+                };
+                btnFolder.FlatAppearance.BorderSize = 0;
+                btnFolder.Paint += (s, e) =>
+                {
+                    e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    using (Pen pen = new Pen(Color.FromArgb(230, 180, 80), 1.5f))
+                    using (Brush brush = new SolidBrush(Color.FromArgb(230, 180, 80)))
+                    {
+                        e.Graphics.DrawRectangle(pen, 3, 7, 17, 11);
+                        Point[] points = {
+                            new Point(3, 7),
+                            new Point(3, 4),
+                            new Point(8, 4),
+                            new Point(10, 7)
+                        };
+                        e.Graphics.FillPolygon(brush, points);
+                    }
+                };
+
+                string targetPath = Path.Combine(appDataPath, inst.FolderName);
+                btnFolder.Click += (s, e) =>
+                {
+                    try
+                    {
+                        if (Directory.Exists(targetPath))
+                        {
+                            System.Diagnostics.Process.Start("explorer.exe", $"\"{targetPath}\"");
+                        }
+                    }
+                    catch { }
+                };
+                row.Controls.Add(btnFolder);
+
+                Label nameLabel = new Label { Text = inst.Name, ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold), Location = new Point(30, 5), Width = 180 };
+                Label timeLabel = new Label { Text = FormatTime(inst.PlayTimeSeconds), ForeColor = Color.LightGreen, Font = new Font("Segoe UI", 10), Location = new Point(220, 5), Width = 190, TextAlign = ContentAlignment.TopRight };
+
+                row.Controls.Add(nameLabel);
+                row.Controls.Add(timeLabel);
+                panelProfileStatsList.Controls.Add(row);
+            }
         }
 
         private string FormatTime(int totalSeconds)
@@ -359,42 +535,39 @@ namespace EDCustomNative
 
         private void LoadAllProfilesOnStartup()
         {
-            List<string> profilesToLoad = new List<string>();
+            List<string> rawLines = new List<string>();
 
             if (File.Exists(profilesListPath))
             {
-                profilesToLoad = File.ReadAllLines(profilesListPath)
+                rawLines = File.ReadAllLines(profilesListPath)
                                      .Where(line => !string.IsNullOrWhiteSpace(line))
                                      .ToList();
             }
-            else
-            {
-                string[] directories = Directory.GetDirectories(appDataPath);
-                foreach (var dir in directories)
-                {
-                    profilesToLoad.Add(Path.GetFileName(dir));
-                }
-                File.WriteAllLines(profilesListPath, profilesToLoad);
-            }
 
-            try
+            foreach (string line in rawLines)
             {
-                string[] physicalDirs = Directory.GetDirectories(appDataPath);
-                foreach (var dir in physicalDirs)
+                string folderName;
+                string displayName;
+                int playTime = 0;
+
+                if (line.Contains("|"))
                 {
-                    string folderName = Path.GetFileName(dir);
-                    if (!profilesToLoad.Contains(folderName))
+                    string[] parts = line.Split('|');
+                    folderName = parts[0];
+                    displayName = parts.Length > 1 ? parts[1] : parts[0];
+                    if (parts.Length > 2)
                     {
-                        Directory.Delete(dir, true);
+                        int.TryParse(parts[2], out playTime);
                     }
                 }
-            }
-            catch { }
+                else
+                {
+                    folderName = line;
+                    displayName = line;
+                }
 
-            foreach (string profileName in profilesToLoad)
-            {
-                Directory.CreateDirectory(Path.Combine(appDataPath, profileName));
-                CreateInstancePlaceholder(profileName);
+                Directory.CreateDirectory(Path.Combine(appDataPath, folderName));
+                CreateInstancePlaceholder(folderName, displayName, playTime);
             }
 
             BuildAddAccountButton();
@@ -407,8 +580,8 @@ namespace EDCustomNative
         {
             try
             {
-                var names = instances.Select(i => i.Name).ToList();
-                File.WriteAllLines(profilesListPath, names);
+                var lines = instances.Select(i => $"{i.FolderName}|{i.Name}|{i.PlayTimeSeconds}").ToList();
+                File.WriteAllLines(profilesListPath, lines);
             }
             catch { }
         }
@@ -416,21 +589,19 @@ namespace EDCustomNative
         private void CreateAndLaunchNewProfile()
         {
             int count = instances.Count + 1;
-            string newName = $"Account {count}";
-            string newPath = Path.Combine(appDataPath, newName);
+            string baseFolder = $"Profile_{DateTime.Now.Ticks}";
+            string displayName = $"Account {count}";
 
-            while (Directory.Exists(newPath))
+            while (Directory.Exists(Path.Combine(appDataPath, baseFolder)))
             {
-                count++;
-                newName = $"Account {count}";
-                newPath = Path.Combine(appDataPath, newName);
+                baseFolder = $"Profile_{DateTime.Now.Ticks}";
             }
 
-            Directory.CreateDirectory(newPath);
+            Directory.CreateDirectory(Path.Combine(appDataPath, baseFolder));
 
             panelButtonList.Controls.Remove(panelAddAccount);
 
-            var newInstance = CreateInstancePlaceholder(newName);
+            var newInstance = CreateInstancePlaceholder(baseFolder, displayName, 0);
 
             panelButtonList.Controls.Add(panelAddAccount);
 
@@ -445,7 +616,7 @@ namespace EDCustomNative
 
             var requestContextSettings = new RequestContextSettings
             {
-                CachePath = Path.Combine(appDataPath, target.Name),
+                CachePath = Path.Combine(appDataPath, target.FolderName),
                 PersistSessionCookies = true
             };
             var requestContext = new RequestContext(requestContextSettings);
@@ -496,7 +667,7 @@ namespace EDCustomNative
             return bmp;
         }
 
-        private ProfileInstance CreateInstancePlaceholder(string profileName)
+        private ProfileInstance CreateInstancePlaceholder(string folderName, string displayName, int playTime)
         {
             Panel btnPanel = new Panel
             {
@@ -508,7 +679,7 @@ namespace EDCustomNative
 
             Label btnLabel = new Label
             {
-                Text = profileName.ToUpper(),
+                Text = displayName.ToUpper(),
                 ForeColor = Color.White,
                 Font = new Font("Arial", 8, FontStyle.Bold),
                 Dock = DockStyle.Top,
@@ -518,22 +689,39 @@ namespace EDCustomNative
             };
             btnPanel.Controls.Add(btnLabel);
 
+            CheckBox chkGrid = new CheckBox
+            {
+                Size = new Size(16, 16),
+                Location = new Point(115, 2),
+                BackColor = Color.FromArgb(60, 60, 60),
+                FlatStyle = FlatStyle.Flat
+            };
+            chkGrid.FlatAppearance.BorderSize = 0;
+            chkGrid.CheckedChanged += (s, e) => {
+                if (isGridMode) SyncLayout();
+            };
+            btnPanel.Controls.Add(chkGrid);
+            chkGrid.BringToFront();
+
             PictureBox picThumb = new PictureBox
             {
                 Dock = DockStyle.Fill,
                 BackColor = Color.Black,
                 SizeMode = PictureBoxSizeMode.Zoom,
-                Image = CreatePlaceholderImage(profileName)
+                Image = CreatePlaceholderImage(displayName)
             };
             btnPanel.Controls.Add(picThumb);
             picThumb.BringToFront();
 
             ProfileInstance instance = new ProfileInstance
             {
-                Name = profileName,
+                FolderName = folderName,
+                Name = displayName,
+                PlayTimeSeconds = playTime,
                 Browser = null,
                 SidebarButtonPanel = btnPanel,
-                SidebarPictureBox = picThumb
+                SidebarPictureBox = picThumb,
+                GridCheckBox = chkGrid
             };
 
             btnLabel.Click += (s, e) => SwitchToInstance(instance);
@@ -576,37 +764,125 @@ namespace EDCustomNative
                 HidePreview();
             }
 
-            CaptureInstanceThumbnail(activeInstance);
-
-            if (target.Browser == null)
+            if (activeInstance != null && !isGridMode)
             {
-                LoadBrowserInstance(target);
+                CaptureInstanceThumbnail(activeInstance);
             }
 
-            panelDashboard.Visible = false;
+            isGridMode = false;
 
-            foreach (var inst in instances)
+            if (activeInstance == target)
             {
-                if (inst == target)
-                {
-                    inst.Browser.Dock = DockStyle.Fill;
-                    inst.Browser.Visible = true;
-                    inst.Browser.BringToFront();
-                    inst.SidebarButtonPanel.BackColor = Color.FromArgb(0, 120, 215);
-                    inst.SidebarButtonPanel.Controls.OfType<Label>().First().BackColor = Color.FromArgb(0, 150, 255);
-                }
-                else
-                {
-                    if (inst.Browser != null)
-                        inst.Browser.Visible = false;
+                activeInstance = null;
+            }
+            else
+            {
+                activeInstance = target;
+            }
 
+            btnSingleMode.Invalidate();
+            btnGridMode.Invalidate();
+
+            SyncLayout();
+        }
+
+        private void SyncLayout()
+        {
+            if (isGridMode)
+            {
+                var checkedInstances = instances.Where(i => i.GridCheckBox.Checked).ToList();
+
+                if (checkedInstances.Count == 0)
+                {
+                    gridContainer.Visible = false;
+                    gridContainer.Controls.Clear();
+                    ShowDashboard();
+                    return;
+                }
+
+                panelDashboard.Visible = false;
+
+                int count = checkedInstances.Count;
+                int cols = (int)Math.Ceiling(Math.Sqrt(count));
+                int rows = (int)Math.Ceiling((double)count / cols);
+
+                gridContainer.Controls.Clear();
+                gridContainer.ColumnStyles.Clear();
+                gridContainer.RowStyles.Clear();
+                gridContainer.ColumnCount = cols;
+                gridContainer.RowCount = rows;
+
+                for (int i = 0; i < cols; i++)
+                    gridContainer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / cols));
+                for (int i = 0; i < rows; i++)
+                    gridContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / rows));
+
+                for (int i = 0; i < count; i++)
+                {
+                    var inst = checkedInstances[i];
+                    if (inst.Browser == null)
+                    {
+                        LoadBrowserInstance(inst);
+                    }
+
+                    inst.Browser.Visible = true;
+                    inst.Browser.Dock = DockStyle.Fill;
+                    gridContainer.Controls.Add(inst.Browser, i % cols, i / cols);
+                }
+
+                gridContainer.Visible = true;
+                gridContainer.BringToFront();
+
+                foreach (var inst in instances)
+                {
+                    if (!checkedInstances.Contains(inst) && inst.Browser != null)
+                    {
+                        inst.Browser.Visible = false;
+                    }
                     inst.SidebarButtonPanel.BackColor = Color.FromArgb(45, 45, 45);
                     inst.SidebarButtonPanel.Controls.OfType<Label>().First().BackColor = Color.FromArgb(60, 60, 60);
                 }
             }
+            else
+            {
+                gridContainer.Visible = false;
+                gridContainer.Controls.Clear();
 
-            activeInstance = target;
-            this.Text = $"Epicest Dueler";
+                if (activeInstance != null)
+                {
+                    panelDashboard.Visible = false;
+                    if (activeInstance.Browser == null)
+                    {
+                        LoadBrowserInstance(activeInstance);
+                    }
+
+                    foreach (var inst in instances)
+                    {
+                        if (inst == activeInstance)
+                        {
+                            inst.Browser.Dock = DockStyle.Fill;
+                            inst.Browser.Visible = true;
+                            panelGameContainer.Controls.Add(inst.Browser);
+                            inst.Browser.BringToFront();
+                            inst.SidebarButtonPanel.BackColor = Color.FromArgb(0, 120, 215);
+                            inst.SidebarButtonPanel.Controls.OfType<Label>().First().BackColor = Color.FromArgb(0, 150, 255);
+                        }
+                        else
+                        {
+                            if (inst.Browser != null)
+                                inst.Browser.Visible = false;
+
+                            inst.SidebarButtonPanel.BackColor = Color.FromArgb(45, 45, 45);
+                            inst.SidebarButtonPanel.Controls.OfType<Label>().First().BackColor = Color.FromArgb(60, 60, 60);
+                        }
+                    }
+                    this.Text = "Epicest Dueler";
+                }
+                else
+                {
+                    ShowDashboard();
+                }
+            }
         }
 
         private void CaptureInstanceThumbnail(ProfileInstance target)
@@ -617,32 +893,41 @@ namespace EDCustomNative
             try
             {
                 var control = target.Browser;
-                if (control.Width <= 0 || control.Height <= 0 || !control.Visible) return;
+                if (!control.Visible || control.Width <= 150 || control.Height <= 150) return;
 
-                Bitmap bmp = new Bitmap(control.Width, control.Height);
-                using (Graphics g = Graphics.FromImage(bmp))
+                if (control.IsHandleCreated && !control.IsDisposed)
                 {
-                    if (control.IsHandleCreated && !control.IsDisposed)
+                    Point screenPoint = control.PointToScreen(Point.Empty);
+                    Rectangle screenBounds = Screen.FromControl(control).Bounds;
+
+                    if (!screenBounds.Contains(screenPoint) ||
+                        screenPoint.X + control.Width > screenBounds.Right ||
+                        screenPoint.Y + control.Height > screenBounds.Bottom)
                     {
-                        Point screenPoint = control.PointToScreen(Point.Empty);
+                        return;
+                    }
+
+                    Bitmap bmp = new Bitmap(control.Width, control.Height);
+                    using (Graphics g = Graphics.FromImage(bmp))
+                    {
                         g.CopyFromScreen(screenPoint.X, screenPoint.Y, 0, 0, control.Size);
                     }
-                }
 
-                Action updateAction = () =>
-                {
-                    target.Thumbnail?.Dispose();
-                    target.Thumbnail = bmp;
-                    target.SidebarPictureBox.Image = bmp;
-                };
+                    Action updateAction = () =>
+                    {
+                        target.Thumbnail?.Dispose();
+                        target.Thumbnail = bmp;
+                        target.SidebarPictureBox.Image = bmp;
+                    };
 
-                if (this.InvokeRequired)
-                {
-                    this.BeginInvoke(updateAction);
-                }
-                else
-                {
-                    updateAction();
+                    if (this.InvokeRequired)
+                    {
+                        this.BeginInvoke(updateAction);
+                    }
+                    else
+                    {
+                        updateAction();
+                    }
                 }
             }
             catch { }
@@ -650,7 +935,26 @@ namespace EDCustomNative
 
         private void ThumbnailUpdateTimer_Tick(object sender, EventArgs e)
         {
-            if (activeInstance != null && activeInstance.Browser != null)
+            bool timeAdded = false;
+
+            if (isGridMode)
+            {
+                var runningGridInstances = instances.Where(i => i.GridCheckBox.Checked && i.Browser != null).ToList();
+                foreach (var inst in runningGridInstances)
+                {
+                    inst.PlayTimeSeconds += 2;
+                    timeAdded = true;
+                    CaptureInstanceThumbnail(inst);
+                }
+            }
+            else if (activeInstance != null && activeInstance.Browser != null)
+            {
+                activeInstance.PlayTimeSeconds += 2;
+                timeAdded = true;
+                CaptureInstanceThumbnail(activeInstance);
+            }
+
+            if (timeAdded)
             {
                 totalPlayTimeSeconds += 2;
 
@@ -663,10 +967,13 @@ namespace EDCustomNative
                 todayPlayTimeSeconds += 2;
 
                 SaveStats();
-            }
+                SaveProfilesList();
 
-            if (previewTarget != null) return;
-            CaptureInstanceThumbnail(activeInstance);
+                if (panelDashboard.Visible)
+                {
+                    UpdateDashboardProfileStats();
+                }
+            }
         }
 
         private void LoadStats()
@@ -714,6 +1021,14 @@ namespace EDCustomNative
             catch { }
         }
 
+        private void RefreshItem_Click(object sender, EventArgs e)
+        {
+            if (contextMenuTarget != null && contextMenuTarget.Browser != null)
+            {
+                contextMenuTarget.Browser.Reload();
+            }
+        }
+
         private void RenameItem_Click(object sender, EventArgs e)
         {
             if (contextMenuTarget == null) return;
@@ -723,51 +1038,15 @@ namespace EDCustomNative
 
             if (string.IsNullOrEmpty(newName) || newName == oldName) return;
 
-            foreach (char c in Path.GetInvalidFileNameChars())
+            contextMenuTarget.Name = newName;
+            contextMenuTarget.SidebarButtonPanel.Controls.OfType<Label>().First().Text = newName.ToUpper();
+            contextMenuTarget.SidebarPictureBox.Image = CreatePlaceholderImage(newName);
+
+            SaveProfilesList();
+
+            if (activeInstance == contextMenuTarget)
             {
-                newName = newName.Replace(c.ToString(), "");
-            }
-
-            string oldPath = Path.Combine(appDataPath, oldName);
-            string newPath = Path.Combine(appDataPath, newName);
-
-            if (Directory.Exists(newPath))
-            {
-                MessageBox.Show("A profile with that name already exists.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            try
-            {
-                HidePreview();
-
-                var targetBrowser = contextMenuTarget.Browser;
-
-                if (targetBrowser != null)
-                {
-                    if (panelGameContainer.Controls.Contains(targetBrowser))
-                        panelGameContainer.Controls.Remove(targetBrowser);
-
-                    targetBrowser.Dispose();
-                }
-
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-
-                Directory.Move(oldPath, newPath);
-
-                contextMenuTarget.Browser = null;
-                contextMenuTarget.Name = newName;
-                contextMenuTarget.SidebarButtonPanel.Controls.OfType<Label>().First().Text = newName.ToUpper();
-                contextMenuTarget.SidebarPictureBox.Image = CreatePlaceholderImage(newName);
-
-                SaveProfilesList();
-
-                SwitchToInstance(contextMenuTarget);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Could not rename profile: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                this.Text = "Epicest Dueler";
             }
         }
 
@@ -805,6 +1084,7 @@ namespace EDCustomNative
             if (contextMenuTarget == null) return;
 
             string selected = contextMenuTarget.Name;
+            string targetFolder = contextMenuTarget.FolderName;
 
             DialogResult confirm = MessageBox.Show(
                 $"Are you sure you want to permanently delete the profile '{selected}'?\nThis will clear its saved logins and cookies.",
@@ -830,6 +1110,7 @@ namespace EDCustomNative
                         }
                         else
                         {
+                            activeInstance = null;
                             ShowDashboard();
                         }
                     }
@@ -852,7 +1133,9 @@ namespace EDCustomNative
 
                     SaveProfilesList();
 
-                    string pathToDelete = Path.Combine(appDataPath, selected);
+                    if (isGridMode) SyncLayout();
+
+                    string pathToDelete = Path.Combine(appDataPath, targetFolder);
                     Task.Run(() =>
                     {
                         try
@@ -886,7 +1169,7 @@ namespace EDCustomNative
 
         private void ShowPreview(ProfileInstance target)
         {
-            if (target == activeInstance || target == previewTarget || target.Browser == null) return;
+            if (isGridMode || target == activeInstance || target == previewTarget || target.Browser == null) return;
 
             HidePreview();
 
@@ -901,10 +1184,10 @@ namespace EDCustomNative
 
         private void HidePreview()
         {
+            if (isGridMode) return;
+
             if (previewTarget != null)
             {
-                CaptureInstanceThumbnail(previewTarget);
-
                 previewTarget.Browser.Visible = false;
                 previewTarget = null;
             }
