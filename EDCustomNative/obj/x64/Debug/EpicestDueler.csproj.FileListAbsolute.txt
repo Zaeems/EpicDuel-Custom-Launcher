@@ -89,3 +89,4 @@ C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestD
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.csproj.CoreCompileInputs.cache
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.exe
 C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.pdb
+C:\Users\Zimmi\source\repos\EDCustomNative\EDCustomNative\obj\x64\Debug\EpicestDueler.exe.config

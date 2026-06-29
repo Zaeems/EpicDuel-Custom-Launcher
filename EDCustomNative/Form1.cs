@@ -161,9 +161,13 @@ namespace EDCustomNative
         {
             profileContextMenu = new ContextMenuStrip();
 
-            var refreshItem = new ToolStripMenuItem("Refresh Profile");
+            var refreshItem = new ToolStripMenuItem("Refresh");
             refreshItem.Click += RefreshItem_Click;
             refreshItem.ForeColor = Color.White;
+
+            var closeSessionItem = new ToolStripMenuItem("Close Session");
+            closeSessionItem.Click += CloseSessionItem_Click;
+            closeSessionItem.ForeColor = Color.White;
 
             var renameItem = new ToolStripMenuItem("Rename Profile");
             renameItem.Click += RenameItem_Click;
@@ -175,6 +179,7 @@ namespace EDCustomNative
             removeItem.Image = GetTrashCanIcon();
 
             profileContextMenu.Items.Add(refreshItem);
+            profileContextMenu.Items.Add(closeSessionItem);
             profileContextMenu.Items.Add(renameItem);
             profileContextMenu.Items.Add(removeItem);
 
@@ -1026,6 +1031,57 @@ namespace EDCustomNative
             if (contextMenuTarget != null && contextMenuTarget.Browser != null)
             {
                 contextMenuTarget.Browser.Reload();
+            }
+        }
+
+        private void CloseSessionItem_Click(Object sender, EventArgs e)
+        {
+            if (contextMenuTarget != null)
+            {
+                CloseProfileSession(contextMenuTarget);
+            }
+        }
+
+        private void CloseProfileSession(ProfileInstance target)
+        {
+            if (target == null) return;
+
+            if (target.Browser != null)
+            {
+                try
+                {
+                    if (panelGameContainer.Controls.Contains(target.Browser))
+                    {
+                        panelGameContainer.Controls.Remove(target.Browser);
+                    }
+                    target.Browser.Dispose();
+                }
+                catch { }
+
+                target.Browser = null;
+            }
+
+            if (target.Thumbnail != null)
+            {
+                target.Thumbnail.Dispose();
+                target.Thumbnail = null;
+            }
+            target.SidebarPictureBox.Image = CreatePlaceholderImage(target.Name);
+
+            if (target.GridCheckBox != null)
+            {
+                target.GridCheckBox.Checked = false;
+            }
+
+            if (activeInstance == target)
+            {
+                activeInstance = null;
+            }
+
+            SyncLayout();
+            if (panelDashboard.Visible)
+            {
+                UpdateDashboardProfileStats();
             }
         }
 
